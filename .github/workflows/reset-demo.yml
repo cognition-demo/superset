@@ -1,0 +1,64 @@
+name: Reset Demo State
+
+on:
+  workflow_dispatch:
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Close open upstream-sync-failure issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUES=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --label upstream-sync-failure \
+            --state open \
+            --json number \
+            --jq '.[].number')
+          for num in $ISSUES; do
+            gh issue close "$num" \
+              --repo "${{ github.repository }}" \
+              --comment "Closed by demo reset — ready for next run."
+            echo "Closed issue #$num"
+          done
+
+      - name: Close open Devin PRs and delete their branches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PRS=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --state open \
+            --json number,headRefName \
+            --jq '.[] | select(.headRefName | startswith("devin/")) | .number')
+          for num in $PRS; do
+            gh pr close "$num" \
+              --repo "${{ github.repository }}" \
+              --comment "Closed by demo reset." \
+              --delete-branch || \
+            gh pr close "$num" \
+              --repo "${{ github.repository }}" \
+              --comment "Closed by demo reset."
+            echo "Closed PR #$num"
+          done
+
+      - name: Reset pipeline state
+        env:
+          PIPELINE_WEBHOOK_URL: ${{ secrets.PIPELINE_WEBHOOK_URL }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+        run: |
+          if [ -z "$PIPELINE_WEBHOOK_URL" ]; then
+            echo "PIPELINE_WEBHOOK_URL not set — skipping pipeline reset"
+            exit 0
+          fi
+          curl -sf -X POST "$PIPELINE_WEBHOOK_URL/api/reset" \
+            -H "X-Webhook-Secret: $WEBHOOK_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+          echo "Pipeline state cleared"
