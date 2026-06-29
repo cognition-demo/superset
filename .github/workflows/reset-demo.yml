@@ -1,0 +1,78 @@
+name: Reset Demo State
+
+on:
+  workflow_dispatch:
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Reset branch to demo baseline
+        run: |
+          # The demo-baseline tag marks the clean state before any Devin fix.
+          # Set it once with: git tag demo-baseline <sha> && git push origin demo-baseline
+          git fetch --tags origin
+          git reset --hard demo-baseline
+          git push --force-with-lease origin main
+          echo "Branch reset to $(git rev-parse --short HEAD)"
+
+      - name: Close open upstream-sync-failure issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUES=$(gh issue list \
+            --label upstream-sync-failure \
+            --state open \
+            --json number \
+            --jq '.[].number')
+          for num in $ISSUES; do
+            gh issue close "$num" \
+              --comment "Closed by demo reset — state restored to baseline."
+            echo "Closed issue #$num"
+          done
+
+      - name: Close open PRs from previous Devin run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PRS=$(gh pr list \
+            --state open \
+            --json number,headRefName \
+            --jq '.[] | select(.headRefName | startswith("devin/")) | .number')
+          for num in $PRS; do
+            gh pr close "$num" \
+              --comment "Closed by demo reset." \
+              --delete-branch || gh pr close "$num" --comment "Closed by demo reset."
+            echo "Closed PR #$num"
+          done
+
+      - name: Reset pipeline state
+        env:
+          PIPELINE_WEBHOOK_URL: ${{ secrets.PIPELINE_WEBHOOK_URL }}
+          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
+        run: |
+          if [ -z "$PIPELINE_WEBHOOK_URL" ]; then
+            echo "PIPELINE_WEBHOOK_URL not set — skipping pipeline reset"
+            exit 0
+          fi
+          curl -sf -X POST "$PIPELINE_WEBHOOK_URL/api/reset" \
+            -H "X-Webhook-Secret: $GITHUB_WEBHOOK_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+          echo "Pipeline state cleared"
