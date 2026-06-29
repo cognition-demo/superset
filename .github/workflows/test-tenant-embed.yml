@@ -20,8 +20,10 @@ jobs:
           cache: pip
 
       - name: Install test dependencies
-        run: pip install marshmallow
+        run: pip install marshmallow pytest
 
       - name: Run tenant embed tests
         run: |
-          python -m pytest tests/unit_tests/extensions/test_tenant_embed.py -v
+          python -m pytest tests/unit_tests/extensions/test_tenant_embed.py -v \
+            --override-ini="filterwarnings=" \
+            --confcutdir=tests/unit_tests/extensions
