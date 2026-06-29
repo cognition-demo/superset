@@ -18,10 +18,10 @@
 """
 Tenant-aware guest token generation for embedded analytics.
 
-Builds Superset guest token payloads scoped to a specific tenant. The
-``tenant_id`` field is included in each RLS rule alongside the SQL ``clause``
-so that the token payload is self-describing: audit systems can correlate
-tokens to tenants without decoding the clause text.
+Builds Superset guest token payloads scoped to a specific tenant.  The SQL
+``clause`` already encodes the tenant identity; use structured logging or a
+request-level audit header for tenant correlation instead of injecting extra
+fields into the RLS rule dict.
 
 Usage::
 
@@ -35,18 +35,14 @@ Usage::
 
 from __future__ import annotations
 
+from typing import Any
 
-def build_tenant_rls_rule(tenant_id: str, dataset_id: int) -> dict:
-    """Return an RLS rule restricting a dataset to a single tenant.
 
-    The ``tenant_id`` key is included alongside ``clause`` so that the token
-    payload is self-describing: callers and audit systems can identify the
-    tenant without decoding the SQL clause.
-    """
+def build_tenant_rls_rule(tenant_id: str, dataset_id: int) -> dict[str, Any]:
+    """Return an RLS rule restricting a dataset to a single tenant."""
     return {
         "dataset": dataset_id,
         "clause": f"tenant_id = '{tenant_id}'",
-        "tenant_id": tenant_id,
     }
 
 
@@ -54,7 +50,7 @@ def build_guest_token_payload(
     tenant_id: str,
     dashboard_id: str,
     dataset_id: int,
-) -> dict:
+) -> dict[str, Any]:
     """Build the full guest token request body for a tenant-scoped dashboard."""
     return {
         "user": {

@@ -46,7 +46,7 @@ def test_tenant_rls_rule_contains_expected_fields() -> None:
     rule = build_tenant_rls_rule(tenant_id="acme", dataset_id=7)
     assert rule["dataset"] == 7
     assert rule["clause"] == "tenant_id = 'acme'"
-    assert rule["tenant_id"] == "acme"
+    assert "tenant_id" not in rule
 
 
 def test_tenant_rls_rule_is_schema_compatible() -> None:
