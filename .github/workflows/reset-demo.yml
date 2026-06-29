@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: main
+          ref: master
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure git
@@ -29,7 +29,7 @@ jobs:
           # Set it once with: git tag demo-baseline <sha> && git push origin demo-baseline
           git fetch --tags origin
           git reset --hard demo-baseline
-          git push --force-with-lease origin main
+          git push --force-with-lease origin master
           echo "Branch reset to $(git rev-parse --short HEAD)"
 
       - name: Close open upstream-sync-failure issues
@@ -65,14 +65,14 @@ jobs:
       - name: Reset pipeline state
         env:
           PIPELINE_WEBHOOK_URL: ${{ secrets.PIPELINE_WEBHOOK_URL }}
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
         run: |
           if [ -z "$PIPELINE_WEBHOOK_URL" ]; then
             echo "PIPELINE_WEBHOOK_URL not set — skipping pipeline reset"
             exit 0
           fi
           curl -sf -X POST "$PIPELINE_WEBHOOK_URL/api/reset" \
-            -H "X-Webhook-Secret: $GITHUB_WEBHOOK_SECRET" \
+            -H "X-Webhook-Secret: $WEBHOOK_SECRET" \
             -H "Content-Type: application/json" \
             -d '{}'
           echo "Pipeline state cleared"
