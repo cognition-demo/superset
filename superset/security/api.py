@@ -74,7 +74,9 @@ class ResourceSchema(PermissiveSchema):
         return data
 
 
-class RlsRuleSchema(PermissiveSchema):
+class RlsRuleSchema(Schema):
+    """Strict schema: reject unknown fields to prevent silent scope widening."""
+
     dataset = fields.Integer()
     clause = fields.String(required=True)  # todo other options?
 

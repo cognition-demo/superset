@@ -22,7 +22,9 @@ jobs:
       - name: Install test dependencies
         run: pip install marshmallow pytest
 
-      - name: Run tenant provisioner tests
+      - name: Run tenant extension tests
         run: |
-          python -m pytest tests/unit_tests/extensions/test_tenant_provisioner.py -v \
-            --confcutdir=tests/unit_tests/extensions
+          python -m pytest \
+            tests/unit_tests/extensions/test_tenant_provisioner.py \
+            tests/unit_tests/extensions/test_tenant_embed.py \
+            -v --confcutdir=tests/unit_tests/extensions

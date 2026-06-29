@@ -18,19 +18,10 @@
 """
 Tests for the tenant embedding helper.
 
-The ``build_tenant_rls_rule`` function includes a ``tenant_id`` field in the
-RLS rule payload alongside the standard ``dataset`` and ``clause`` fields.
-These tests verify that the payload is structurally correct and that the RLS
-rule passes validation by the upstream guest-token schema.
-
-If ``test_tenant_rls_rule_is_schema_compatible`` starts failing with::
-
-    marshmallow.exceptions.ValidationError: {'tenant_id': ['Unknown field.']}
-
-it means the upstream ``RlsRuleSchema`` no longer accepts unknown fields.
-The fix is to remove ``tenant_id`` from the RLS rule returned by
-``build_tenant_rls_rule`` -- use structured logging or a request-level
-audit header for tenant correlation instead.
+The ``build_tenant_rls_rule`` function returns only the fields recognised by
+the strict upstream ``RlsRuleSchema`` (``dataset`` and ``clause``).  Tenant
+correlation is handled via Python logging rather than embedding extra fields
+in the RLS rule dict.
 """
 
 from __future__ import annotations
@@ -46,16 +37,11 @@ def test_tenant_rls_rule_contains_expected_fields() -> None:
     rule = build_tenant_rls_rule(tenant_id="acme", dataset_id=7)
     assert rule["dataset"] == 7
     assert rule["clause"] == "tenant_id = 'acme'"
-    assert rule["tenant_id"] == "acme"
+    assert "tenant_id" not in rule
 
 
 def test_tenant_rls_rule_is_schema_compatible() -> None:
-    """RLS rule payload must be accepted by the upstream guest-token schema.
-
-    This test will fail after upstream introduces strict unknown-field
-    rejection on RlsRuleSchema (commit 0fd244b). The fix: remove
-    ``tenant_id`` from the dict returned by ``build_tenant_rls_rule``.
-    """
+    """RLS rule payload must be accepted by the strict upstream schema."""
     rule = build_tenant_rls_rule(tenant_id="acme", dataset_id=7)
     loaded = RlsRuleSchema().load(rule)
     assert loaded["clause"] == "tenant_id = 'acme'"
@@ -75,11 +61,7 @@ def test_guest_token_payload_structure() -> None:
 
 
 def test_guest_token_payload_rls_is_schema_compatible() -> None:
-    """All RLS rules in the guest token payload must pass schema validation.
-
-    This test will fail after upstream introduces strict unknown-field
-    rejection on RlsRuleSchema (commit 0fd244b).
-    """
+    """All RLS rules in the guest token payload must pass schema validation."""
     payload = build_guest_token_payload(
         tenant_id="acme",
         dashboard_id="abc-123",
