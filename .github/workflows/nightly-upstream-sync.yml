@@ -1,0 +1,134 @@
+name: Nightly Upstream Sync
+
+on:
+  schedule:
+    - cron: "0 2 * * *"   # 2 AM UTC nightly
+  workflow_dispatch:        # manual trigger for demo
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false  # let the running job finish, queue the next
+
+jobs:
+  sync-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: master
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream mirror remote
+        run: |
+          git remote add upstream-mirror https://github.com/cognition-demo/superset-mirror.git || true
+          git fetch upstream-mirror master
+
+      - name: Record upstream commits since last sync
+        id: commits
+        run: |
+          LAST=$(git log --format="%H" -- | tail -1)
+          UPSTREAM_COMMITS=$(git log upstream-mirror/master --not HEAD --oneline | head -20)
+          echo "upstream_commits<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$UPSTREAM_COMMITS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Rebase onto upstream mirror
+        run: |
+          git rebase upstream-mirror/master || echo "REBASE_FAILED=true" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install test dependencies
+        # Install marshmallow at the version pinned in the (post-rebase) lockfile,
+        # NOT unpinned — the whole point is that the sync moves this pin from
+        # 3.26.2 to 4.3.0. Installing unpinned would always grab 4.x and make the
+        # provisioner break independent of the sync.
+        run: pip install "$(grep -E '^marshmallow==' requirements/base.txt)" pytest
+
+      - name: Run custom extension tests
+        id: tests
+        run: |
+          python -m pytest \
+            tests/unit_tests/extensions/test_tenant_provisioner.py \
+            tests/unit_tests/extensions/test_tenant_embed.py \
+            -v --confcutdir=tests/unit_tests/extensions \
+            --tb=short 2>&1 | tee test-output.txt
+          echo "EXIT_CODE=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
+
+      - name: Create incident issue on failure
+        if: env.EXIT_CODE != '0' || env.REBASE_FAILED == 'true'
+        id: issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TEST_OUTPUT=$(cat test-output.txt | tail -40)
+          UPSTREAM="${{ steps.commits.outputs.upstream_commits }}"
+
+          BODY=$(cat <<ISSUEEOF
+          Nightly upstream sync detected test failures. Devin will investigate and open a fix PR.
+
+          ## Failing tests
+
+          $(grep "FAILED" test-output.txt | sed 's/^/- /' || echo "- (see test output below)")
+
+          ## Upstream commits
+
+          $(echo "$UPSTREAM" | sed 's/^/- /')
+
+          ## Test output
+
+          \`\`\`
+          $TEST_OUTPUT
+          \`\`\`
+
+          ---
+          *Created automatically by the nightly sync workflow.*
+          ISSUEEOF
+          )
+
+          ISSUE_URL=$(gh issue create \
+            --title "Upstream sync failure: custom extension tests failing" \
+            --body "$BODY" \
+            --label "upstream-sync-failure" \
+            --repo "${{ github.repository }}")
+          echo "issue_url=$ISSUE_URL" >> "$GITHUB_OUTPUT"
+          echo "issue_number=$(echo $ISSUE_URL | grep -oE '[0-9]+$')" >> "$GITHUB_OUTPUT"
+
+      - name: Notify pipeline
+        if: env.EXIT_CODE != '0' || env.REBASE_FAILED == 'true'
+        env:
+          PIPELINE_WEBHOOK_URL: ${{ secrets.PIPELINE_WEBHOOK_URL }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+        run: |
+          if [ -z "$PIPELINE_WEBHOOK_URL" ]; then
+            echo "PIPELINE_WEBHOOK_URL not set — skipping pipeline trigger"
+            exit 0
+          fi
+
+          FAILING=$(grep "FAILED" test-output.txt | sed 's/FAILED //' | \
+            jq -R -s 'split("\n") | map(select(length > 0))')
+          COMMITS=$(echo "${{ steps.commits.outputs.upstream_commits }}" | \
+            jq -R -s 'split("\n") | map(select(length > 0))')
+
+          curl -sf -X POST "$PIPELINE_WEBHOOK_URL/webhook/trigger" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: $WEBHOOK_SECRET" \
+            -d "{
+              \"issue_number\": ${{ steps.issue.outputs.issue_number || 0 }},
+              \"issue_url\": \"${{ steps.issue.outputs.issue_url }}\",
+              \"repo\": \"${{ github.repository }}\",
+              \"failing_tests\": $FAILING,
+              \"upstream_commits\": $COMMITS
+            }"

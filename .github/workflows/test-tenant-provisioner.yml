@@ -1,0 +1,28 @@
+name: Tenant Provisioner Tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install test dependencies
+        run: pip install marshmallow pytest
+
+      - name: Run tenant provisioner tests
+        run: |
+          python -m pytest tests/unit_tests/extensions/test_tenant_provisioner.py -v \
+            --confcutdir=tests/unit_tests/extensions
