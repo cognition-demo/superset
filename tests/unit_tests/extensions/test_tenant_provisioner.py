@@ -15,52 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""
-Tests for the tenant provisioning schema.
-
-IMPORTANT — marshmallow 4 compatibility warning
------------------------------------------------
-These tests will FAIL after upstream commit 919bd35028887803c1722c8ee5267b17d5180853
-(marshmallow 3→4 bump) is merged into this fork.
-
-Root cause
-~~~~~~~~~~
-``TenantProvisioningSchema`` uses the marshmallow 3 ``@validates`` signature:
-
-    @validates("organization_slug")
-    def validate_organization_slug(self, value: str) -> None:
-        ...
-
-In marshmallow 4, the calling convention for ``@validates`` methods changed:
-marshmallow now passes an additional ``data_key=`` keyword argument::
-
-    validator(value, data_key=<str>)
-
-Any validator that does not accept ``**kwargs`` raises at *runtime* — not at
-import time, not at schema instantiation time — only when ``Schema.load()``
-is called with actual request data:
-
-    TypeError: validate_contract_end_date() got an unexpected keyword argument 'data_key'
-
-This surfaces in production when the customer-success team tries to provision
-a new enterprise tenant.  The provisioning endpoint returns HTTP 500 and no
-new workspace is created.  New customer onboarding is completely blocked until
-the fix is deployed.
-
-The fix
-~~~~~~~
-Add ``**kwargs: Any`` to every ``@validates`` method in
-``superset/extensions/tenant_provisioner.py``::
-
-    @validates("organization_slug")
-    def validate_organization_slug(self, value: str, **kwargs: Any) -> None:
-        ...
-
-See the pattern in upstream commit 919bd35 applied to:
-- ``superset/databases/schemas.py``  (``validate_file_extension``)
-- ``superset/reports/schemas.py``    (``validate_custom_width`` x2)
-- ``superset/themes/schemas.py``     (``validate_json_data``, ``validate_theme_name``, etc.)
-"""
+"""Tests for the tenant provisioning schema."""
 
 from __future__ import annotations
 
@@ -91,11 +46,7 @@ VALID_PAYLOAD: dict = {
 
 
 def test_valid_payload_loads_successfully() -> None:
-    """A fully valid provisioning request deserialises without error.
-
-    On marshmallow 4 (before the fix) this raises:
-        TypeError: validate_contract_end_date() got an unexpected keyword argument 'data_key'
-    """
+    """A fully valid provisioning request deserialises without error."""
     schema = TenantProvisioningSchema()
     result = schema.load(VALID_PAYLOAD)
     assert result["organization_slug"] == "acme-corp"

@@ -74,7 +74,7 @@ class ResourceSchema(PermissiveSchema):
         return data
 
 
-class RlsRuleSchema(PermissiveSchema):
+class RlsRuleSchema(Schema):
     dataset = fields.Integer()
     clause = fields.String(required=True)  # todo other options?
 

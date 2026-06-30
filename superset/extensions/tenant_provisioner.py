@@ -32,29 +32,6 @@ request before any infrastructure is created.  Bad data that slips through
 validation can corrupt tenant routing tables or double-bill customers, so
 validation is strict and a ``ValidationError`` propagates back to the caller
 as an HTTP 422 response.
-
-NOTE FOR REVIEWERS
-------------------
-This schema was written against **marshmallow 3.x**.  The ``@validates``
-decorator in marshmallow 3 calls validator methods with a single positional
-argument (the field value):
-
-    def validate_foo(self, value: str) -> None: ...
-
-Marshmallow 4 changed the calling convention: it now passes an additional
-``data_key=`` keyword argument.  Any validator that does not accept
-``**kwargs`` will raise at *runtime* (not at import time) when ``.load()``
-is invoked:
-
-    TypeError: validate_contract_end_date() got an unexpected keyword argument 'data_key'
-
-The fix is a one-line change per validator: add ``**kwargs: Any`` to the
-signature -- it absorbs the ``data_key`` keyword that marshmallow 4 now passes.
-Root cause: the upstream sync bumps marshmallow 3.x -> 4.x in commit ``919bd35``
-(``chore(deps): bump marshmallow from 3.26.2 to 4.3.0``, #39751), which also
-adds this same ``**kwargs`` pattern across the core schemas
-(``superset/reports/schemas.py``, ``superset/charts/schemas.py``, ...).  The
-fork's custom validators were never updated.
 """
 
 from __future__ import annotations
@@ -127,15 +104,11 @@ class TenantProvisioningSchema(Schema):
     sso_domain = fields.String(load_default=None, allow_none=True)
 
     # -----------------------------------------------------------------------
-    # Validators — marshmallow 3 style (no **kwargs)
-    # -----------------------------------------------------------------------
-    # NOTE: marshmallow 4 passes data_key= as a keyword argument when calling
-    # these methods.  Without **kwargs this raises at runtime:
-    #   TypeError: validate_<name>() got an unexpected keyword argument 'data_key'
+    # Validators
     # -----------------------------------------------------------------------
 
     @validates("organization_slug")
-    def validate_organization_slug(self, value: str) -> None:
+    def validate_organization_slug(self, value: str, **kwargs: Any) -> None:
         """Enforce RFC 1123 slug rules and block reserved names."""
         if not _SLUG_RE.match(value):
             raise ValidationError(
@@ -149,7 +122,7 @@ class TenantProvisioningSchema(Schema):
             )
 
     @validates("tier")
-    def validate_tier(self, value: str) -> None:
+    def validate_tier(self, value: str, **kwargs: Any) -> None:
         """Reject unknown subscription tiers."""
         if value not in VALID_TIERS:
             raise ValidationError(
@@ -158,7 +131,7 @@ class TenantProvisioningSchema(Schema):
             )
 
     @validates("data_residency_region")
-    def validate_data_residency_region(self, value: str) -> None:
+    def validate_data_residency_region(self, value: str, **kwargs: Any) -> None:
         """Reject regions where we do not have a certified data centre."""
         if value not in VALID_REGIONS:
             raise ValidationError(
@@ -167,7 +140,7 @@ class TenantProvisioningSchema(Schema):
             )
 
     @validates("contract_end_date")
-    def validate_contract_end_date(self, value: str) -> None:
+    def validate_contract_end_date(self, value: str, **kwargs: Any) -> None:
         """Require an ISO 8601 date that is strictly in the future."""
         try:
             end_date = datetime.strptime(value, "%Y-%m-%d").date()
@@ -200,8 +173,6 @@ def provision_tenant(payload: dict[str, Any]) -> dict[str, Any]:
         marshmallow.ValidationError: if *payload* fails schema validation.
     """
     schema = TenantProvisioningSchema()
-    # .load() triggers all @validates methods — this is where marshmallow 4
-    # breaks if validators lack **kwargs.
     validated = schema.load(payload)
 
     # In production this would call into the tenant lifecycle manager:
