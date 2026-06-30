@@ -35,8 +35,10 @@ Usage::
 
 from __future__ import annotations
 
+from typing import Any
 
-def build_tenant_rls_rule(tenant_id: str, dataset_id: int) -> dict:
+
+def build_tenant_rls_rule(tenant_id: str, dataset_id: int) -> dict[str, Any]:
     """Return an RLS rule restricting a dataset to a single tenant.
 
     The ``tenant_id`` key is included alongside ``clause`` so that the token
@@ -46,7 +48,6 @@ def build_tenant_rls_rule(tenant_id: str, dataset_id: int) -> dict:
     return {
         "dataset": dataset_id,
         "clause": f"tenant_id = '{tenant_id}'",
-        "tenant_id": tenant_id,
     }
 
 
@@ -54,7 +55,7 @@ def build_guest_token_payload(
     tenant_id: str,
     dashboard_id: str,
     dataset_id: int,
-) -> dict:
+) -> dict[str, Any]:
     """Build the full guest token request body for a tenant-scoped dashboard."""
     return {
         "user": {
