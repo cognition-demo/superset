@@ -39,14 +39,13 @@ from __future__ import annotations
 def build_tenant_rls_rule(tenant_id: str, dataset_id: int) -> dict:
     """Return an RLS rule restricting a dataset to a single tenant.
 
-    The ``tenant_id`` key is included alongside ``clause`` so that the token
-    payload is self-describing: callers and audit systems can identify the
-    tenant without decoding the SQL clause.
+    The tenant is identified by the SQL clause; callers and audit systems
+    should use structured logging or request-level audit headers for tenant
+    correlation rather than embedding extra keys in the RLS rule payload.
     """
     return {
         "dataset": dataset_id,
         "clause": f"tenant_id = '{tenant_id}'",
-        "tenant_id": tenant_id,
     }
 
 
