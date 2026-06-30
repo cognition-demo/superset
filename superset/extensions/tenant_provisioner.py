@@ -46,7 +46,8 @@ Marshmallow 4 changed the calling convention: it now passes an additional
 ``**kwargs`` will raise at *runtime* (not at import time) when ``.load()``
 is invoked:
 
-    TypeError: validate_contract_end_date() got an unexpected keyword argument 'data_key'
+    TypeError: validate_contract_end_date() got an unexpected
+    keyword argument 'data_key'
 
 The fix is a one-line change per validator: add ``**kwargs: Any`` to the
 signature -- it absorbs the ``data_key`` keyword that marshmallow 4 now passes.
@@ -61,9 +62,9 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import Any
 
-from marshmallow import Schema, ValidationError, fields, validates
+from marshmallow import fields, Schema, validates, ValidationError
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -135,7 +136,7 @@ class TenantProvisioningSchema(Schema):
     # -----------------------------------------------------------------------
 
     @validates("organization_slug")
-    def validate_organization_slug(self, value: str) -> None:
+    def validate_organization_slug(self, value: str, **kwargs: Any) -> None:
         """Enforce RFC 1123 slug rules and block reserved names."""
         if not _SLUG_RE.match(value):
             raise ValidationError(
@@ -149,16 +150,15 @@ class TenantProvisioningSchema(Schema):
             )
 
     @validates("tier")
-    def validate_tier(self, value: str) -> None:
+    def validate_tier(self, value: str, **kwargs: Any) -> None:
         """Reject unknown subscription tiers."""
         if value not in VALID_TIERS:
             raise ValidationError(
-                f"Invalid tier '{value}'. "
-                f"Must be one of: {sorted(VALID_TIERS)}."
+                f"Invalid tier '{value}'. Must be one of: {sorted(VALID_TIERS)}."
             )
 
     @validates("data_residency_region")
-    def validate_data_residency_region(self, value: str) -> None:
+    def validate_data_residency_region(self, value: str, **kwargs: Any) -> None:
         """Reject regions where we do not have a certified data centre."""
         if value not in VALID_REGIONS:
             raise ValidationError(
@@ -167,7 +167,7 @@ class TenantProvisioningSchema(Schema):
             )
 
     @validates("contract_end_date")
-    def validate_contract_end_date(self, value: str) -> None:
+    def validate_contract_end_date(self, value: str, **kwargs: Any) -> None:
         """Require an ISO 8601 date that is strictly in the future."""
         try:
             end_date = datetime.strptime(value, "%Y-%m-%d").date()
