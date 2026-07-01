@@ -127,15 +127,11 @@ class TenantProvisioningSchema(Schema):
     sso_domain = fields.String(load_default=None, allow_none=True)
 
     # -----------------------------------------------------------------------
-    # Validators — marshmallow 3 style (no **kwargs)
-    # -----------------------------------------------------------------------
-    # NOTE: marshmallow 4 passes data_key= as a keyword argument when calling
-    # these methods.  Without **kwargs this raises at runtime:
-    #   TypeError: validate_<name>() got an unexpected keyword argument 'data_key'
+    # Validators
     # -----------------------------------------------------------------------
 
     @validates("organization_slug")
-    def validate_organization_slug(self, value: str) -> None:
+    def validate_organization_slug(self, value: str, **kwargs: Any) -> None:
         """Enforce RFC 1123 slug rules and block reserved names."""
         if not _SLUG_RE.match(value):
             raise ValidationError(
@@ -149,7 +145,7 @@ class TenantProvisioningSchema(Schema):
             )
 
     @validates("tier")
-    def validate_tier(self, value: str) -> None:
+    def validate_tier(self, value: str, **kwargs: Any) -> None:
         """Reject unknown subscription tiers."""
         if value not in VALID_TIERS:
             raise ValidationError(
@@ -158,7 +154,7 @@ class TenantProvisioningSchema(Schema):
             )
 
     @validates("data_residency_region")
-    def validate_data_residency_region(self, value: str) -> None:
+    def validate_data_residency_region(self, value: str, **kwargs: Any) -> None:
         """Reject regions where we do not have a certified data centre."""
         if value not in VALID_REGIONS:
             raise ValidationError(
@@ -167,7 +163,7 @@ class TenantProvisioningSchema(Schema):
             )
 
     @validates("contract_end_date")
-    def validate_contract_end_date(self, value: str) -> None:
+    def validate_contract_end_date(self, value: str, **kwargs: Any) -> None:
         """Require an ISO 8601 date that is strictly in the future."""
         try:
             end_date = datetime.strptime(value, "%Y-%m-%d").date()
