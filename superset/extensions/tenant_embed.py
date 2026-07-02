@@ -46,7 +46,6 @@ def build_tenant_rls_rule(tenant_id: str, dataset_id: int) -> dict:
     return {
         "dataset": dataset_id,
         "clause": f"tenant_id = '{tenant_id}'",
-        "tenant_id": tenant_id,
     }
 
 
